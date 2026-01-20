@@ -1,0 +1,13 @@
+# Backend
+backend/src/__pycache__/
+backend/src/*.pyc
+
+# Docker
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

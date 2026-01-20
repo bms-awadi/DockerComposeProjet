@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exercice 4 - PostgreSQL Stack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .status-bar {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .status-item {
+            display: inline-block;
+            margin: 0 15px;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+
+        .status-item.healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-item.unhealthy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button.delete {
+            background: #e74c3c;
+        }
+
+        button.delete:hover {
+            background: #c0392b;
+        }
+
+        button.update {
+            background: #f39c12;
+        }
+
+        button.update:hover {
+            background: #d68910;
+        }
+
+        .users-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .user-info {
+            flex-grow: 1;
+        }
+
+        .user-info strong {
+            color: #667eea;
+        }
+
+        .user-info small {
+            color: #666;
+            display: block;
+            margin-top: 5px;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message {
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .pgadmin-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .pgadmin-link a {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 15px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+
+        .pgadmin-link a:hover {
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>PostgreSQL Stack</h1>
+            <p class="subtitle">Gestion d'utilisateurs avec PostgreSQL et PgAdmin</p>
+        </header>
+
+        <div class="status-bar">
+            <span id="dbStatus" class="status-item">Checking database...</span>
+            <span id="backendStatus" class="status-item">Checking backend...</span>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Ajouter un utilisateur</h2>
+                <div id="createMessage" class="message"></div>
+                <form id="createForm">
+                    <div class="form-group">
+                        <label for="createUsername">Nom d'utilisateur</label>
+                        <input type="text" id="createUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="createEmail">Email</label>
+                        <input type="email" id="createEmail" required>
+                    </div>
+                    <button type="submit">Créer</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Liste des utilisateurs</h2>
+                <div id="usersMessage" class="message"></div>
+                <div class="users-list" id="usersList"></div>
+            </div>
+        </div>
+
+        <div class="pgadmin-link">
+            <a href="http://localhost:5050" target="_blank">Ouvrir PgAdmin</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000/api';
+
+        function showMessage(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = 'message show ' + (isError ? 'error' : 'success');
+            setTimeout(() => {
+                element.className = 'message';
+            }, 3000);
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+
+                if (data.status === 'healthy') {
+                    document.getElementById('dbStatus').className = 'status-item healthy';
+                    document.getElementById('dbStatus').textContent = 'Database: Connected';
+                    document.getElementById('backendStatus').className = 'status-item healthy';
+                    document.getElementById('backendStatus').textContent = 'Backend: Online';
+                } else {
+                    document.getElementById('dbStatus').className = 'status-item unhealthy';
+                    document.getElementById('dbStatus').textContent = 'Database: Disconnected';
+                }
+            } catch (error) {
+                document.getElementById('backendStatus').className = 'status-item unhealthy';
+                document.getElementById('backendStatus').textContent = 'Backend: Offline';
+            }
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_URL}/users`);
+                const data = await response.json();
+
+                const usersList = document.getElementById('usersList');
+                if (data.success && data.users.length === 0) {
+                    usersList.innerHTML = '<p>Aucun utilisateur</p>';
+                    return;
+                }
+
+                if (data.success) {
+                    usersList.innerHTML = data.users.map(user => `
+                        <div class="user-item">
+                            <div class="user-info">
+                                <strong>ID:</strong> ${user.id} | <strong>Username:</strong> ${user.username}
+                                <br>
+                                <strong>Email:</strong> ${user.email}
+                                <small>Créé le: ${new Date(user.created_at).toLocaleString()}</small>
+                            </div>
+                            <div class="user-actions">
+                                <button class="update" onclick="updateUser(${user.id})">Modifier</button>
+                                <button class="delete" onclick="deleteUser(${user.id})">Supprimer</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                showMessage('usersMessage', 'Erreur lors du chargement des utilisateurs', true);
+            }
+        }
+
+        document.getElementById('createForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('createUsername').value;
+            const email = document.getElementById('createEmail').value;
+
+            try {
+                const response = await fetch(`${API_URL}/users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, email })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('createMessage', 'Utilisateur créé avec succès');
+                    document.getElementById('createForm').reset();
+                    loadUsers();
+                } else {
+                    showMessage('createMessage', data.error || 'Erreur lors de la création', true);
+                }
+            } catch (error) {
+                showMessage('createMessage', 'Erreur de connexion au serveur', true);
+            }
+        });
+
+        async function updateUser(id) {
+            const username = prompt('Nouveau nom d\'utilisateur:');
+            if (!username) return;
+
+            const email = prompt('Nouvel email:');
+            if (!email) return;
+
+            try {
+                const response = await fetch(`${API_URL}/users/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, email })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('usersMessage', 'Utilisateur mis à jour');
+                    loadUsers();
+                } else {
+                    showMessage('usersMessage', data.error || 'Erreur lors de la mise à jour', true);
+                }
+            } catch (error) {
+                showMessage('usersMessage', 'Erreur de connexion', true);
+            }
+        }
+
+        async function deleteUser(id) {
+            if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/users/${id}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('usersMessage', 'Utilisateur supprimé');
+                    loadUsers();
+                } else {
+                    showMessage('usersMessage', data.error || 'Erreur lors de la suppression', true);
+                }
+            } catch (error) {
+                showMessage('usersMessage', 'Erreur de connexion', true);
+            }
+        }
+
+        checkHealth();
+        loadUsers();
+        setInterval(checkHealth, 10000);
+        setInterval(loadUsers, 5000);
+    </script>
+</body>
+
+</html>
