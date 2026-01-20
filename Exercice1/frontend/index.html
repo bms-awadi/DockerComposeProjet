@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Exercice 1</title>
+</head>
+
+<body>
+    <h1>Frontend</h1>
+    <p id="message">Chargement...</p>
+
+    <script>
+        fetch('http://localhost:5000/api/hello')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('message').textContent = data.message;
+            })
+            .catch(error => {
+                document.getElementById('message').textContent = 'Erreur de connexion';
+            });
+    </script>
+</body>
+
+</html>
