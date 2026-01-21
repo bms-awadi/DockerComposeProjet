@@ -10,7 +10,7 @@
     <p id="message">Chargement...</p>
 
     <script>
-        fetch('http://localhost:5000/api/hello')
+        fetch('/api/hello')
             .then(response => response.json())
             .then(data => {
                 document.getElementById('message').textContent = data.message;
