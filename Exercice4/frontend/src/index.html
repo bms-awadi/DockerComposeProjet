@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exercice 4 - PostgreSQL Stack</title>
+    <title>Exercice 4 - Stack PostgreSQL + Tor</title>
     <style>
         * {
             margin: 0;
@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -46,11 +46,15 @@
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         .status-item {
             display: inline-block;
-            margin: 0 15px;
+            margin: 5px 10px;
             padding: 8px 15px;
             border-radius: 5px;
             font-weight: 600;
@@ -64,6 +68,11 @@
         .status-item.unhealthy {
             background: #f8d7da;
             color: #721c24;
+        }
+
+        .tor-info {
+            font-size: 0.9em;
+            color: #666;
         }
 
         .grid {
@@ -122,10 +131,24 @@
             font-weight: 600;
             transition: background 0.3s;
             margin-right: 10px;
+            margin-top: 10px;
         }
 
         button:hover {
             background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        button.import {
+            background: #7d4cdb;
+        }
+
+        button.import:hover {
+            background: #6638b8;
         }
 
         button.delete {
@@ -145,7 +168,7 @@
         }
 
         .users-list {
-            max-height: 500px;
+            max-height: 600px;
             overflow-y: auto;
         }
 
@@ -155,9 +178,20 @@
             margin-bottom: 10px;
             border-radius: 5px;
             display: flex;
-            justify-content: space-between;
+            gap: 15px;
             align-items: center;
             border-left: 4px solid #667eea;
+        }
+
+        .user-item.imported {
+            border-left-color: #7d4cdb;
+        }
+
+        .user-photo {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
         }
 
         .user-info {
@@ -174,9 +208,29 @@
             margin-top: 5px;
         }
 
+        .user-source {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        .user-source.manual {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .user-source.randomuser {
+            background: #e8d4f8;
+            color: #5a1f7d;
+        }
+
         .user-actions {
             display: flex;
             gap: 10px;
+            flex-direction: column;
         }
 
         .message {
@@ -202,16 +256,16 @@
             display: block;
         }
 
-        .pgadmin-link {
+        .footer-links {
             text-align: center;
             margin-top: 20px;
         }
 
-        .pgadmin-link a {
+        .footer-links a {
             display: inline-block;
             background: white;
             color: #667eea;
-            padding: 15px 30px;
+            padding: 12px 25px;
             border-radius: 8px;
             text-decoration: none;
             font-weight: 600;
@@ -219,7 +273,7 @@
             transition: transform 0.3s;
         }
 
-        .pgadmin-link a:hover {
+        .footer-links a:hover {
             transform: translateY(-2px);
         }
 
@@ -234,13 +288,17 @@
 <body>
     <div class="container">
         <header>
-            <h1>PostgreSQL Stack</h1>
-            <p class="subtitle">Gestion d'utilisateurs avec PostgreSQL et PgAdmin</p>
+            <h1>Stack PostgreSQL + Tor</h1>
+            <p class="subtitle">Gestion d'utilisateurs avec import via Tor</p>
         </header>
 
         <div class="status-bar">
-            <span id="dbStatus" class="status-item">Checking database...</span>
-            <span id="backendStatus" class="status-item">Checking backend...</span>
+            <div>
+                <span id="dbStatus" class="status-item">Checking...</span>
+                <span id="backendStatus" class="status-item">Checking...</span>
+                <span id="torStatus" class="status-item">Checking...</span>
+            </div>
+            <div class="tor-info" id="torInfo"></div>
         </div>
 
         <div class="grid">
@@ -256,8 +314,18 @@
                         <label for="createEmail">Email</label>
                         <input type="email" id="createEmail" required>
                     </div>
-                    <button type="submit">Créer</button>
+                    <button type="submit">Creer manuellement</button>
                 </form>
+
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+
+                <h2 style="margin-top: 20px;">Importer via Tor</h2>
+                <p style="color: #666; margin-bottom: 15px; font-size: 0.9em;">
+                    Recuperer des utilisateurs depuis RandomUser.me via le reseau Tor
+                </p>
+                <button id="importBtn" class="import" onclick="importUsers()">
+                    Importer 10 utilisateurs
+                </button>
             </div>
 
             <div class="card">
@@ -267,7 +335,7 @@
             </div>
         </div>
 
-        <div class="pgadmin-link">
+        <div class="footer-links">
             <a href="http://localhost:5050" target="_blank">Ouvrir PgAdmin</a>
         </div>
     </div>
@@ -281,7 +349,7 @@
             element.className = 'message show ' + (isError ? 'error' : 'success');
             setTimeout(() => {
                 element.className = 'message';
-            }, 3000);
+            }, 5000);
         }
 
         async function checkHealth() {
@@ -294,6 +362,15 @@
                     document.getElementById('dbStatus').textContent = 'Database: Connected';
                     document.getElementById('backendStatus').className = 'status-item healthy';
                     document.getElementById('backendStatus').textContent = 'Backend: Online';
+
+                    if (data.tor_connected) {
+                        document.getElementById('torStatus').className = 'status-item healthy';
+                        document.getElementById('torStatus').textContent = 'Tor: Connected';
+                        document.getElementById('torInfo').textContent = `IP de sortie Tor: ${data.tor_ip}`;
+                    } else {
+                        document.getElementById('torStatus').className = 'status-item unhealthy';
+                        document.getElementById('torStatus').textContent = 'Tor: Disconnected';
+                    }
                 } else {
                     document.getElementById('dbStatus').className = 'status-item unhealthy';
                     document.getElementById('dbStatus').textContent = 'Database: Disconnected';
@@ -317,12 +394,17 @@
 
                 if (data.success) {
                     usersList.innerHTML = data.users.map(user => `
-                        <div class="user-item">
+                        <div class="user-item ${user.source === 'randomuser' ? 'imported' : ''}">
+                            ${user.photo_url ? `<img src="${user.photo_url}" alt="${user.username}" class="user-photo">` : ''}
                             <div class="user-info">
                                 <strong>ID:</strong> ${user.id} | <strong>Username:</strong> ${user.username}
                                 <br>
                                 <strong>Email:</strong> ${user.email}
-                                <small>Créé le: ${new Date(user.created_at).toLocaleString()}</small>
+                                ${user.phone ? `<br><strong>Telephone:</strong> ${user.phone}` : ''}
+                                ${user.location ? `<br><strong>Localisation:</strong> ${user.location}` : ''}
+                                <br>
+                                <span class="user-source ${user.source}">${user.source === 'manual' ? 'Cree manuellement' : 'Importe via Tor'}</span>
+                                <small>Cree le: ${new Date(user.created_at).toLocaleString()}</small>
                             </div>
                             <div class="user-actions">
                                 <button class="update" onclick="updateUser(${user.id})">Modifier</button>
@@ -354,16 +436,48 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showMessage('createMessage', 'Utilisateur créé avec succès');
+                    showMessage('createMessage', 'Utilisateur cree avec succes');
                     document.getElementById('createForm').reset();
                     loadUsers();
                 } else {
-                    showMessage('createMessage', data.error || 'Erreur lors de la création', true);
+                    showMessage('createMessage', data.error || 'Erreur lors de la creation', true);
                 }
             } catch (error) {
                 showMessage('createMessage', 'Erreur de connexion au serveur', true);
             }
         });
+
+        async function importUsers() {
+            const btn = document.getElementById('importBtn');
+            btn.disabled = true;
+            btn.textContent = 'Import en cours via Tor...';
+
+            try {
+                const response = await fetch(`${API_URL}/import-users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ count: 10 })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('createMessage',
+                        `${data.imported} utilisateurs importes via Tor (${data.skipped} ignores car deja existants)`
+                    );
+                    loadUsers();
+                } else {
+                    showMessage('createMessage', data.error || 'Erreur lors de l\'import', true);
+                }
+            } catch (error) {
+                showMessage('createMessage', 'Erreur de connexion (Tor ou API)', true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Importer 10 utilisateurs';
+            }
+        }
 
         async function updateUser(id) {
             const username = prompt('Nouveau nom d\'utilisateur:');
@@ -384,10 +498,10 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showMessage('usersMessage', 'Utilisateur mis à jour');
+                    showMessage('usersMessage', 'Utilisateur mis a jour');
                     loadUsers();
                 } else {
-                    showMessage('usersMessage', data.error || 'Erreur lors de la mise à jour', true);
+                    showMessage('usersMessage', data.error || 'Erreur lors de la mise a jour', true);
                 }
             } catch (error) {
                 showMessage('usersMessage', 'Erreur de connexion', true);
@@ -395,7 +509,7 @@
         }
 
         async function deleteUser(id) {
-            if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur?')) {
+            if (!confirm('Etes-vous sur de vouloir supprimer cet utilisateur?')) {
                 return;
             }
 
@@ -407,7 +521,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showMessage('usersMessage', 'Utilisateur supprimé');
+                    showMessage('usersMessage', 'Utilisateur supprime');
                     loadUsers();
                 } else {
                     showMessage('usersMessage', data.error || 'Erreur lors de la suppression', true);

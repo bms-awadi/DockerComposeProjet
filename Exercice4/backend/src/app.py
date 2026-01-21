@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import psycopg2
+import requests
 import os
-from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -15,9 +15,16 @@ DB_CONFIG = {
     "port": os.getenv("DB_PORT", "5432"),
 }
 
+TOR_PROXY = os.getenv("TOR_PROXY", "socks5h://tor:9050")
+RANDOM_USER_API = "https://randomuser.me/api/"
+
 
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
+
+
+def get_proxies():
+    return {"http": TOR_PROXY, "https": TOR_PROXY}
 
 
 def init_db():
@@ -30,6 +37,10 @@ def init_db():
             id SERIAL PRIMARY KEY,
             username VARCHAR(100) UNIQUE NOT NULL,
             email VARCHAR(100) NOT NULL,
+            phone VARCHAR(50),
+            location VARCHAR(200),
+            photo_url TEXT,
+            source VARCHAR(20) DEFAULT 'manual',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """
@@ -50,11 +61,25 @@ def health_check():
         cursor.close()
         conn.close()
 
+        try:
+            response = requests.get(
+                "http://httpbin.org/ip", proxies=get_proxies(), timeout=5
+            )
+            tor_status = response.status_code == 200
+            tor_ip = (
+                response.json().get("origin", "unknown") if tor_status else "unknown"
+            )
+        except:
+            tor_status = False
+            tor_ip = "unknown"
+
         return jsonify(
             {
                 "status": "healthy",
                 "database": "connected",
                 "postgres_version": version[0],
+                "tor_connected": tor_status,
+                "tor_ip": tor_ip,
             }
         )
     except Exception as e:
@@ -72,7 +97,10 @@ def get_users():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, email, created_at FROM users ORDER BY created_at DESC"
+            """
+            SELECT id, username, email, phone, location, photo_url, source, created_at 
+            FROM users ORDER BY created_at DESC
+        """
         )
         users = cursor.fetchall()
         cursor.close()
@@ -85,7 +113,11 @@ def get_users():
                     "id": user[0],
                     "username": user[1],
                     "email": user[2],
-                    "created_at": user[3].isoformat() if user[3] else None,
+                    "phone": user[3],
+                    "location": user[4],
+                    "photo_url": user[5],
+                    "source": user[6],
+                    "created_at": user[7].isoformat() if user[7] else None,
                 }
             )
 
@@ -100,7 +132,10 @@ def get_user(user_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, email, created_at FROM users WHERE id = %s",
+            """
+            SELECT id, username, email, phone, location, photo_url, source, created_at 
+            FROM users WHERE id = %s
+        """,
             (user_id,),
         )
         user = cursor.fetchone()
@@ -115,7 +150,11 @@ def get_user(user_id):
                         "id": user[0],
                         "username": user[1],
                         "email": user[2],
-                        "created_at": user[3].isoformat() if user[3] else None,
+                        "phone": user[3],
+                        "location": user[4],
+                        "photo_url": user[5],
+                        "source": user[6],
+                        "created_at": user[7].isoformat() if user[7] else None,
                     },
                 }
             )
@@ -141,8 +180,8 @@ def create_user():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO users (username, email) VALUES (%s, %s) RETURNING id, created_at",
-            (username, email),
+            "INSERT INTO users (username, email, phone, location, photo_url, source) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, created_at",
+            (username, email, None, None, None, "manual"),
         )
         result = cursor.fetchone()
         conn.commit()
@@ -157,6 +196,7 @@ def create_user():
                         "id": result[0],
                         "username": username,
                         "email": email,
+                        "source": "manual",
                         "created_at": result[1].isoformat(),
                     },
                 }
@@ -227,6 +267,86 @@ def delete_user(user_id):
         conn.close()
 
         return jsonify({"success": True, "message": "User deleted successfully"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/import-users", methods=["POST"])
+def import_users():
+    try:
+        data = request.get_json()
+        count = data.get("count", 10)
+
+        if count > 50:
+            count = 50
+
+        response = requests.get(
+            RANDOM_USER_API,
+            params={"results": count},
+            proxies=get_proxies(),
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Failed to fetch users from RandomUser API",
+                    }
+                ),
+                500,
+            )
+
+        data = response.json()
+        imported_users = []
+        skipped = 0
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        for user_data in data.get("results", []):
+            try:
+                username = user_data["login"]["username"]
+                email = user_data["email"]
+                phone = user_data.get("phone", "")
+                location = f"{user_data['location']['city']}, {user_data['location']['country']}"
+                photo_url = user_data["picture"]["large"]
+
+                cursor.execute(
+                    """
+                    INSERT INTO users (username, email, phone, location, photo_url, source)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """,
+                    (username, email, phone, location, photo_url, "randomuser"),
+                )
+
+                user_id = cursor.fetchone()[0]
+                imported_users.append(
+                    {"id": user_id, "username": username, "email": email}
+                )
+                conn.commit()
+            except psycopg2.IntegrityError:
+                skipped += 1
+                conn.rollback()
+                continue
+
+        cursor.close()
+        conn.close()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": len(imported_users),
+                "skipped": skipped,
+                "users": imported_users,
+                "via_tor": True,
+            }
+        )
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "error": f"Connection error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

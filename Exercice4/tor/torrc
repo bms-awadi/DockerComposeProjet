@@ -1,0 +1,11 @@
+# Configuration Tor pour le proxy SOCKS5
+
+ExitNodes {fr}
+StrictNodes 1
+
+GeoIPExcludeUnknown 1
+
+SOCKSPort 0.0.0.0:9050
+ControlPort 9051
+
+MaxCircuitDirtiness 600

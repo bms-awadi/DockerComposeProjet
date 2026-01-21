@@ -25,12 +25,24 @@ services:
       - "5050:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
-      - ./pgadmin_servers.json:/pgadmin4/servers.json
+      - ./docker/pgadmin_servers.json:/pgadmin4/servers.json
     networks:
       - app-network
     depends_on:
       postgres:
         condition: service_healthy
+
+  tor:
+    image: dperson/torproxy
+    container_name: tor
+    restart: unless-stopped
+    ports:
+      - "9050:9050"
+      - "9051:9051"
+    volumes:
+      - ./tor/torrc:/etc/tor/torrc
+    networks:
+      - app-network
 
   backend:
     build:
@@ -47,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      tor:
+        condition: service_started
 
   frontend:
     build:
